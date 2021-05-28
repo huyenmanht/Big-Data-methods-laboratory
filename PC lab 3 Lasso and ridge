@@ -1,0 +1,336 @@
+# clear R space
+rm( list = ls() )
+
+# load packages
+library(glmnet) # lasso and ridge regression for prediction
+library(hdm)    # lasso-based double selection for causal inference
+
+#load financial data related oil prices
+load("/Users/manhhuyen/Documents/SP21 Unifr/Big Data Methods/PC labs/oilfinance.RData")
+
+#check the number of observations and variables
+dim(data)
+
+
+# ridge and lasso regression for prediction of continuous outcome # (gaussian family)
+
+#Ex. 1: Histogram for dependent variable 
+# define y (price change of RTS index in % compared to one week ago) and x (lagged levels and price changes of oil supply, stocks, indices)
+y=data[,1] #vector column
+x=data[,-1]
+
+x=as.matrix(x)
+
+# show distribution of y by means of histogram
+hist(y, ylim=c(0,100)) #ylim is for the lim of the y axis
+
+#Ex. 2: 
+# define a training sample (188 obs)
+train=sample(x=376,size=188) #(x_ooriginal sample, traning sample size_188obs)
+
+#draw differently everytime 
+
+#Which observations are in my training dataset?
+#train
+
+# vector of true Y in the test sample (all observations not in the training sample)
+ytest=y[-train]
+
+ytest #188 elements in the y test vector (outcome variable)
+
+# apply k-fold cross-validation (k=10) in the training data to find optimal lambda for ridge regression (alpha=0) (if alpha=1 _ lasso)
+cv.ridge=cv.glmnet(x=x[train ,], y=y[train], family="gaussian", alpha =0, nfolds=10)
+cv.ridge$lambda.min
+#[1] 29.82681
+
+#Ex. 3:
+# run ridge regression (alpha=0) in training data with optimal lambda
+ridge=glmnet(x=x[train,],y=y[train], family="gaussian", alpha=0, lambda =cv.ridge$lambda.min)
+
+#show coefficients
+coef(ridge)
+#cannot interpret coefs as causal effect here 
+
+#Ex.4:
+# predict outcome in test data using the optimal lambda 
+yhattest= predict(ridge, newx=x[-train,]) #fit in the ridge model, and the new x (not in train)
+yhattest
+
+
+####Model assessment###
+#####
+#Ex.5:
+# compute the mean squared error
+mean((ytest-yhattest)^2)
+#[1] 8.196969_ not easy to interpret 
+
+# compute the mean absolute error
+mean(abs(ytest-yhattest))
+#[1] 2.115774 the absolute mean of difference btw observed and predicted y
+
+#compare error to average of absolute y in test data
+mean(abs(ytest))
+#[1] 2.795024 _ mean of absolute y in the data 
+
+
+#mean of abs error (2.1) is quite high compared to mean of absolute value of y(2.8)
+
+#Ex. 6:
+# run ridge regression (alpha=0) in training data with user-provided penalty lambda=10 (didn't use data drien method to calculate lambda)
+ridge=glmnet(x=x[train,],y=y[train], family="gaussian", alpha=0, lambda =10)
+
+#show coefficients
+coef(ridge) #cannot intepret coefs as causal effects here 
+#different coefs compared to optimal lambda 
+
+#Ex. 7:
+# predict outcome in test data 
+yhattest= predict(ridge, newx=x[-train,])
+yhattest
+
+#compute mean squared error
+mean((ytest-yhattest)^2)
+#[1] 5.535626 _ smaller than the ridge model having optimal lambda
+#ridge doesn't shrink coefs to exactly 0, but lasso does
+
+#LASSO##
+#Ex. 8:
+# now run the same steps for lasso regression, implying that alpha=1 (lasso)
+# apply k-fold cross-validation (k=10) in the training data to find optimal lambda
+cv.lasso=cv.glmnet(x=x[train ,], y=y[train], family="gaussian", alpha =1, nfolds=10)
+cv.lasso$lambda.min
+#[1] 0.3198231
+
+
+# run lasso regression (alpha=1) in training data with optimal lambda
+lasso=glmnet(x=x[train,],y=y[train], family="gaussian", alpha=1, lambda =cv.lasso$lambda.min)
+
+#show coefficients (note that some coefficients might be zero)
+coef(lasso) #there are alot of coefs shrunk to exactly 0 (dot)
+
+#EX.9:
+# predict outcome in test data using the optimal lambda 
+yhattest= predict(lasso, newx=x[-train,]) #fit in model lasso for prediction for obs not in training data set
+yhattest
+
+#Ex. 10: Model assessment
+# compute the mean squared error
+mean((ytest-yhattest)^2)
+#[1] 2.966393 much smaller than MSE in Ridge using optimal lambda
+
+# compute the mean absolute error
+mean(abs(ytest-yhattest))
+#[1] 1.323103
+
+#compare error to average of absolute y in test data
+mean(abs(ytest))
+#[1] 2.795024
+
+#mean of absolute error = 1.32 < mean of absolute value of y (2.8) _ better than previous case 
+
+#Ex. 11:
+# predict expected price change in % of y for mean values of x in the data
+#define a matrix having the column means, 1 row, no of columns of predictors x
+meanx=matrix(colMeans(x),1,ncol(x)) 
+#1 row, 216 columns, elements = mean of each predictors
+yhatmeanx=predict(lasso, newx=meanx) #predict for mean value of x
+yhatmeanx
+#             s0
+#[1,] -0.1284718
+#colMeans=column mean
+#ncol=number of columns
+
+###############################################################
+# ridge and lasso regression for prediction of binary outcome #
+###############################################################
+#Ex. 12:
+# create a binary variable for y>0 (meaning that RTSindex change is larger than zero) 
+ybin=y>0
+#ybin = true if y>0 (return), = false otherwise (loss)
+
+#Ex. 13: LASSO LOGIT REGRESSION
+# run the same steps as before using lasso logit regression for binary outcomes (setting family to binomial)
+# apply k-fold cross-validation (k=10) in the training data to find optimal lambda
+cv.lasso2=cv.glmnet(x=x[train ,], y=ybin[train], family="binomial", alpha =1, nfolds=10)
+cv.lasso2$lambda.min
+#[1] 0.03483087
+
+#Ex. 14:
+# run lasso regression (alpha=1) in training data with optimal lambda
+lasso=glmnet(x=x[train,],y=ybin[train], family="binomial", alpha=1, lambda =cv.lasso2$lambda.min)
+
+#show coefficients (note that some coefficients might be zero_shrunk too exactly 0)
+coef(lasso)
+#different coefs compared to lasso with continuous outcome variable
+
+#Ex. 15: listen again
+# predict outcome in test data using the optimal lambda 
+yhattest= predict(lasso, newx=x[-train,], type="response") #type: default: the scale of linear predictor, "response": scale of response variable
+#help(predict.glm)
+yhattest
+
+#EX. 16:listen again 
+# recode the predicted outcome to be one if the predicted probability is larger than 50% (=0.5)
+yhattest=yhattest>0.5
+
+# define the true outcomes in the test data
+ytest=ybin[-train]
+
+# calculate the classification error rate
+errate=mean((ytest!=yhattest))
+errate
+
+# one minus the classification error rate gives the share of correct classifications
+1-errate
+
+
+######################################################################################
+# causal inference for one regressors based on double lasso without sample splitting #
+######################################################################################
+#Ex. 17:
+# now, define "brentyl1" (price/barrel of crude brent oil in last period, i.e. one week ago) to be the regressor whose causal effect on y is of interest
+d=data[,2] #treatmean variable
+
+# define remaining regressors to be used as potential controls for causal analysis 
+controls=data[,c(-1,-2)] #control variables (exclude dep var and treatment)
+
+#Ex. 18:
+# run LASSO with double selection of x in the treatment and outcome equation to estimate the causal effect of d on y
+# the effect of d is assumed to be homogeneous (does not depend on values of x or d)
+effect=rlassoEffect(x=controls,y=y,d=d, method = "double selection") #default method: partialling out 
+#rlassoEffect
+summary(effect)
+#[1] "Estimates and significance testing of the effect of target variables"
+#     Estimate. Std. Error t value Pr(>|t|)
+#d1   0.07027    0.10610   0.662    0.508 _ not sig 
+
+#Ex. 19:
+# rerun the command with "partialling out" rather than "double selection"
+effect=rlassoEffect(x=controls,y=y,d=d, method = "partialling out")
+summary(effect)
+#[1] "Estimates and significance testing of the effect of target variables"
+#       Estimate. Std. Error t value Pr(>|t|)
+#[1,]   0.07030    0.09495    0.74    0.459 _ not significant 
+#the estimates and p values don't differ much, because partialling out and double selection are asymptotically equivalent (when the sample is large)
+
+###################################################################################
+# causal inference for one regressors based on double lasso with sample splitting #
+###################################################################################
+
+#Ex. 20:
+# now apply partialling out method with sample splitting (do not use predetermined controls)
+
+#y on x
+# use training sample to estimate lasso-based model for y as a function of x based on cross-validation
+cv.lasso=cv.glmnet(x=controls[train,],y=y[train], family="gaussian", alpha =1, nfolds=10) 
+#fit in optimal lambda in the model
+lassoy=glmnet(x=controls[train,],y=y[train], family="gaussian", alpha=1, lambda =cv.lasso$lambda.min)
+
+#select controls with non-zero coefficients
+controlsy=controls[,which( coef(lassoy) != 0)] #controls whose coefs in lassoy is # 0
+
+#d on x
+# use training sample to estimate lasso-based model for d as a function of x based on cross-validation
+cv.lasso=cv.glmnet(x=controls[train,],y=d[train], family="gaussian", alpha =1, nfolds=10)
+#fit in the optimal lambda
+lassod=glmnet(x=controls[train,],y=d[train], family="gaussian", alpha=1, lambda =cv.lasso$lambda.min)
+
+#select controls with non-zero coefficients
+controlsd=controls[,which( coef(lassod) != 0)] #select the controls whose coefs in lassod is different than 0
+
+# estimate residuals in test data
+residualsy1=residuals(lm(y[-train]~controlsy[-train,])) #residual of y test - predicted y (using control in test data)(linear model)
+residualsd1=residuals(lm(d[-train]~controlsd[-train,])) #residual of d
+
+# estimate effect in test data
+effect1=lm(residualsy1~-1+residualsd1)$coef #linear moel (y = redisual of y, regressed on residual of d), extract the coef
+effect1
+#residualsd1 
+#0.01931392 _ effect of d on Y if using sample splitting
+
+#### repeat all steps, but SWAPPING THE ROLES OF THE SAMPLES (estimate models for d/y in test data and residuals/effect in training data)
+
+#c-v: y on x: ESTIMATE MODELS USING TEST DATA
+cv.lasso=cv.glmnet(x=controls[-train,],y=y[-train], family="gaussian", alpha =1, nfolds=10)
+
+#model estimation using optimal lambda
+lassoy=glmnet(x=controls[-train,],y=y[-train], family="gaussian", alpha=1, lambda =cv.lasso$lambda.min)
+#select controls vars with non zero coefs 
+controlsy=controls[,which( coef(lassoy) != 0)]
+
+#cv: d on x
+cv.lasso=cv.glmnet(x=controls[-train,],y=d[-train], family="gaussian", alpha =1, nfolds=10)
+#fit in optimal lambda
+lassod=glmnet(x=controls[-train,],y=d[-train], family="gaussian", alpha=1, lambda =cv.lasso$lambda.min)
+#pick the controls whose coefs are =! 0
+controlsd=controls[,which( coef(lassod) != 0)]
+
+#calculate residuals
+residualsy2=residuals(lm(y[train]~controlsy[train,])) #USE TRAIN DATA AS TEST DATA 
+residualsd2=residuals(lm(d[train]~controlsd[train,]))
+
+effect2=lm(residualsy2~1-residualsd2)$coef
+
+# estimate the effect of d on y as the average of effects in subsamples
+effect=(effect1+effect2)/2
+effect
+
+# estimate of s.e.
+residualsd=c(residualsd1,residualsd2); residualsy=c(residualsy1,residualsy2) #collect residuals across subsamples 
+se=sqrt(sum( (residualsy*residualsd)^2)/(sum(residualsd^2)*sum(residualsd^2))) #apply standard formula for heteroscedasticity robust se in OLS
+se #heteroscedasticity robust se in OLS
+#[1] 0.02307165
+
+##########################################################################################
+# causal inference for several regressors based on double lasso without sample splitting #
+##########################################################################################
+#Ex. 21:
+# now, define both "brentyl1" and "wtiyl1" (price/barrel of crude WTI oil in last period, i.e. one week ago)
+# the argument "index" determines which columns of the regressor matrix correspond to the treatment variables 
+effect=rlassoEffects(x=x, y=y, index=c(1:2), method = "partialling out") #causal inference 
+summary(effect)
+#[1] "Estimates and significance testing of the effect of target variables"
+#Estimate. Std.        Error t value Pr(>|t|)
+#brentyl1   0.07030    0.09495   0.740    0.459 _ not sig 
+#wtiyl1     0.03398    0.10661   0.319    0.750 _ not sig
+
+##########################################################################
+# lasso-based causal inference with instruments without sample splitting #
+##########################################################################
+
+# now consider IV regression with many instruments and control variables, to estimate the causal effect of a single variable d 
+# load data
+data(EminentDomain) #data on judical eminent decision? #in hdm package
+#we only use the sub data set named logNM 
+# define the variables
+y = EminentDomain$logNM$y # outcome variable: log house price in non-metro area of circuit (=district)
+d = EminentDomain$logNM$d # causal variable: number of pro-plaintiff appellate takings decisions overturning government's seizure of property in favor of private owner (indicator for protection of individual property rights)
+z = EminentDomain$logNM$z # instruments: characteristics of randomly assigned judges including gender, race, religion, political affiliation,...
+x = EminentDomain$logNM$x # control variables
+
+#Ex. 22:IV LASSO to choose controls and instruments
+# run LASSO IV estimation for the selection of controls x and instruments z
+effect2=rlassoIV(x, d, y, z)
+#help(rlassoIV) arguments(matrix of exogeneous vars, endo var, outcome, matrix of instrumental variables)
+
+summary(effect2)
+#Estimates and Significance Testing of the effect of target variables in the IV regression model 
+#   coeff.      se. t-value p-value
+#d1 0.002723 0.006818   0.399    0.69 _ not sig
+
+#Ex. 23:#IV LASSO choose instruments, do not choose controls
+# run LASSO IV estimation for the selection of z, but take all x variables as controls
+effect3=rlassoIV(x, d, y, z, select.X=FALSE) #select.X (logical, indicating selection on the exogenous variables)=false -> include all control vars
+summary(effect3)
+#[1] "Estimates and significance testing of the effect of target variables in the IV regression model"
+ #     coeff.       se. t-value p-value  
+#d1 -0.023148  0.009656  -2.397  0.0165 * sig
+ # ---
+ 
+#Ex. 24: #LASOS IV choose controls, not choose instruments
+# run LASSO IV estimation for the selection of x, while using all of the first 20 elements in z as instruments 
+effect4=rlassoIV(x, d, y, z[,1:20], select.Z=FALSE) #lasso iv choose X, shouldn't not choose instrument Z
+summary(effect4)
+#[1] "Estimation and significance testing of the effect of target variables in the IV regression model"
+#coeff.      se. t-value p-value
+#d1 0.010989 0.007186   1.529   0.126 # not sig
