@@ -1,19 +1,33 @@
+rm(list=ls( ))
+#remove old data in memory
+
 setwd("/Users/manhhuyen/Documents/SP21 Unifr/Big Data Methods/PC labs")
-library(np)
+library(np) #load nonparametric regression package
+
 data("oecdpanel")
 sum(is.na(data))
-attach(oecdpanel)
+attach(oecdpanel) # every variable in "oecdpanel" loaded into work space
 
+str(oecdpanel)
+#short description of the content of the dataset
 
-hist(inv)
-library(np)  
+hist(inv) #plot the density of the log of the average investment/GDP ratio for each 5-year period by a histogram
 
-bw <- npudensbw(dat=inv, bwmethod="cv.ls")
+#density estimation of inv
+
+bw <- npudensbw(dat=inv, bwmethod="cv.ls") #choose optimal bandwidth by least squares cross validation
 bw
-fhat <- npudens(bws=bw)
+
+fhat <- npudens(bws=bw) # estimate the density
+
+summary(dens) # summarize results
+
+dens$bw #Another way to get the calculated bandwidth
+
+#How to get the estimated data points (Probabilities of the values in inv in the dataset)
+dens$dens
 summary(fhat)
 npplot(bws=bw, plot.errors.method="asymptotic")
-
 
 require(graphics)
 
@@ -22,3 +36,292 @@ plot(density(c(-4, -3.5,-3,-2.5,-2,-1.5,-1)),bws=bw)  # IQR = 0
 density(x=inv,bw=bw)
 d <- density(rnorm(10000))
 approx(fhat$x, fhat$y, xout = c(-4, -3.5, -2))
+
+
+# plot the density at the data points
+plot(x=inv,y=dens$dens )
+
+#plot the density everywhere
+npplot(densbw) 
+
+#plot the density everywhere with confidence intervals
+npplot(densbw, plot.errors.method = "bootstrap", plot.errors.style="band") 
+#to change the confidence interval
+#argument: plot.errors.quantiles = c(0.025,0.975)
+
+### Ex. 4: Now, use evaluation points that are different than the data points ###
+evaluation <- c(-4, -3.5, -3, -2.5, -2, -1.5, -1) #vector of evaluation points 
+dens2 <- npudens(bws=densbw, tdat= inv,  edat= evaluation) #npudens(bw, tdat = datapoints to estimate density (training data)= inv, edat = density evaluation points)
+
+# plot the density at the evaluation points
+plot(x=evaluation,y=c(dens2$dens))
+
+
+#Ex. 5:
+###Now, use a bandwidth that is too large###
+
+# estimate with h=10
+dens3 <- npudens(bws=10, tdat=inv) 
+
+# plot the density at the data points
+plot(inv,dens3$dens )
+
+
+
+
+# Ex. 6:
+### Estimation of the joint density of the variables "inv" and "popgro" ###
+
+#choose optimal bandwidth by least squares cross validation
+jdensbw <- npudensbw(dat=data.frame(inv,popgro), bwmethod="cv.ls") 
+jdensbw
+
+
+#Ex 7:
+
+# estimate joint density
+jdens <- npudens(bws=jdensbw) 
+
+# summarize results
+summary(jdens)
+
+#How to get the estimated data points (Joint probabilities of the values in inv and popgro)
+jdens$dens
+
+
+#plot the joint density
+npplot(jdensbw)
+
+
+#Ex. 8:
+#plot the joint density with confidence intervals
+npplot(jdensbw, plot.errors.method = "asymptotic")
+
+
+#Ex. 9: plot the joint density, fix view
+npplot(jdensbw, theta = 320.0, phi = 30.0, view = "fixed")  
+
+
+
+#  CONDITIONAL DENSITY ESTIMATION  #
+
+### estimate the conditional density of "inv" given "popgro" ###
+# Ex. 10: estimate bandwidth
+cdensbw<- npcdensbw(ydat=inv, xdat=popgro, bwmethod="cv.ls") 
+cdensbw
+
+#Ex. 11 estimate conditional density
+cdens <- npcdens(bws=cdensbw) 
+
+# summarize results
+summary(cdens)
+
+
+
+#plot the conditional density
+npplot(cdensbw) 
+
+
+#plot the conditional density, fix view
+npplot(cdensbw, theta = 55.0, phi = 30.0, view = "fixed")  
+
+
+#Ex. 12:
+### now, estimate the conditional density of "inv" given "popgro" and "year=1985" ###
+# estimate bandwidth
+cdensbw2<- npcdensbw(formula=inv[year==1985]~popgro[year==1985], bwmethod="cv.ls") 
+
+
+cdensbw2
+
+#Ex. 13:
+# estimate conditional density
+cdens2 <- npcdens(bws=cdensbw2) 
+
+# summarize results
+summary(cdens2)
+
+#plot the conditional density
+npplot(cdensbw2) 
+
+#plot the conditional density, fix view
+npplot(cdensbw2, theta = 55.0, phi = 30.0, view = "fixed")  
+
+
+
+
+# MEAN REGRESSION #
+
+
+#Ex. 14:
+###linear regression###
+
+linreg<-lm(formula=growth ~ oecd + factor(year) + initgdp + popgro + inv + humancap)
+# run OLS regression
+
+summary(linreg)
+# regression output
+
+
+###local constant regression###
+#Ex. 15: choose optimal bandwidth
+regbw <- npregbw(formula=growth ~ factor(oecd) + factor(year) + initgdp + popgro + inv + humancap, bwmethod="cv.ls")
+regbw
+
+#Ex. 16: estimate model and also the first derivatives
+reg <- npreg(bws=regbw, gradients=TRUE) 
+
+
+
+# summarize results
+summary(reg)
+
+reg$grad
+
+#Ex. 17: plot regression curves at median values of all other regressors
+npplot(regbw, plot.errors.method = "bootstrap", plot.errors.boot.num = 20, plot.errors.style="band") 
+
+#Ex. 18: plot first derivatives at median values of all other regressors
+npplot(regbw, gradients=TRUE, plot.errors.method = "bootstrap", plot.errors.boot.num = 20, plot.errors.style="band") 
+
+#Ex. 19: plot first derivatives at the third quartile of the values of all other regressors
+npplot(regbw, gradients=TRUE, xq=c(0.75, 0.75, 0.75, 0.75, 0.75, 0.75), plot.errors.method = "bootstrap", plot.errors.boot.num = 20, plot.errors.style="band") 
+
+
+###local linear regression###
+#Ex. 20: choose optimal bandwidth for local linear estimation
+regbw2 <- npregbw(formula=growth ~ oecd + factor(year) + initgdp + popgro + inv + humancap, bwmethod="cv.ls", regtype="ll")
+regbw2
+
+#Ex. 21: estimate model and also the first derivatives using local linear estimation
+reg2 <- npreg(bws=regbw2, gradients=TRUE) 
+reg2
+
+#plot regression curves at median values of all other regressors
+npplot(regbw2, plot.errors.method = "bootstrap", plot.errors.boot.num = 20, plot.errors.style="band") 
+
+###NEW DATASET! Canadian Census Public Use Tapes###
+data(cps71)
+# load database cps71 #used later on
+
+str(cps71)
+#short description of the content of the dataset
+
+attach(cps71)
+# every variable in "cps71" loaded into work space 
+
+#Ex. 22: choose optimal bandwidth for local linear estimation using cps data, now use Epanechnikov kernel instead of Gaussian (default)
+regbw3 <- npregbw(formula=logwage~age, regtype="ll", bwmethod="cv.ls", ckertype="epanechnikov", gradients=TRUE)
+regbw3
+
+#Ex. 23:estimate model and also the first derivatives using local linear estimation
+reg3 <- npreg(bws=regbw3, gradients=TRUE) 
+reg3
+
+#summary of reg3
+summary(reg3)
+
+#Ex. 24: 
+# plot regression curve
+npplot(bws=regbw3, plot.errors.method="asymptotic", plot.errors.style="band")
+points(x=age, y=logwage, col="red")
+
+# plot gradients
+npplot(bws=regbw3, plot.errors.method="asymptotic", gradient=TRUE, plot.errors.style="band")
+
+#Ex. 25: 
+# create a very large bandwidth
+regbw4<-regbw3 #save the old bw object to the new object
+regbw4$bw=100000*regbw4$bw #make the bw very large 
+regbw4$bw
+
+#plot regression curve with very large bandwidth - looks like a linear regression curve
+npplot(regbw4, plot.errors.method = "bootstrap", plot.errors.boot.num = 20, plot.errors.style="band") 
+
+# plot gradients with very large bandwidth - gradient is constant just as in OLS regression
+npplot(bws=regbw4, plot.errors.method="asymptotic", gradient=TRUE, plot.errors.style="band")
+
+
+#Ex. 26:
+#  TEST OF SIGNIFICANCE     #
+
+
+sigtest<-npsigtest(bws=regbw3, boot.num=399) 
+# test the explanatory variable in the cps (using local linear regression)
+
+summary(sigtest)
+# test summary
+
+
+#  SPECIFICATION TESTING   #
+
+#Ex. 27: 
+# linear model for cps data
+linreg2<- lm(formula=logwage~age, x=TRUE, y=TRUE)
+
+# plot the regression line
+plot(x=age, y=logwage)
+lines(x=age, y=linreg2$fitted.values)
+
+#Ex. 28:
+# test linear cps model
+spectest1<-npcmstest(model = linreg2, xdat = age, ydat = logwage, boot.num=399)
+
+# test statistics for linear cps model
+summary(spectest1)
+
+#Ex. 29:
+# nonlinear model for cps data
+linreg3<- lm(formula=logwage~age+I(age^2)+I(age^3), x=TRUE, y=TRUE)
+
+# plot the regression line
+plot(age, logwage)
+lines(age, fitted(linreg3))
+
+#Ex. 30:
+# test nonlinear cps model
+spectest2<-npcmstest(model = linreg3,  xdat = cbind(age,I(age^2),I(age^3)), ydat = logwage, boot.num=399)
+
+# test statistics for nonlinear cps model
+summary(spectest2)
+
+
+
+# QUANTILE REGRESSION  #
+
+#Ex. 31:
+# choose optimal bandwidth
+qregbw<-npcdistbw(ydat =logwage, xdat=age, bwmethod="cv.ls")
+qregbw
+
+#Ex. 32:
+#quantile regression at median
+qreg05 <-npqreg(bws=qregbw, tau=0.5)
+
+#summary of quantile regression at median
+summary(qreg05)
+
+#Ex. 33: 
+# plot regression curve at median
+plot(x=age, y=logwage)
+lines(x=age, y=qreg05$quantile, col="red", lty=1)
+#we want to extract qreg05$quantile -> y
+
+#npplot(bws=qregbw, tau = 0.5, quantreg = TRUE,  gradient=TRUE, plot.errors.style="band")
+# plot gradients at median - does currently not work
+
+#Ex. 34:
+#quantile regression at 0.25 quantile
+qreg025 <-npqreg(bws=qregbw, tau=0.25)
+summary(qreg025)
+# plot regression curve at 0.25 quantile
+lines(x=age, y=qreg025$quantile, col="blue", lty=1) ##line command to add line to current plot
+#lty=1 means solid line
+#comment: the 0.25 quantile is of course lower than the median (0.5 quantile)
+
+
+#npplot(bws=qregbw, tau = 0.25, quantreg = TRUE, gradient=TRUE, plot.errors.style="band")
+# plot gradients at 0.25 quantile - does currently not work
+
+
+
