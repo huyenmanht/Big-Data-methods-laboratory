@@ -1,0 +1,24 @@
+setwd("/Users/manhhuyen/Documents/SP21 Unifr/Big Data Methods/PC labs")
+library(np)
+data("oecdpanel")
+sum(is.na(data))
+attach(oecdpanel)
+
+
+hist(inv)
+library(np)  
+
+bw <- npudensbw(dat=inv, bwmethod="cv.ls")
+bw
+fhat <- npudens(bws=bw)
+summary(fhat)
+npplot(bws=bw, plot.errors.method="asymptotic")
+
+
+require(graphics)
+
+plot(density(c(-4, -3.5,-3,-2.5,-2,-1.5,-1)),bws=bw)  # IQR = 0
+
+density(x=inv,bw=bw)
+d <- density(rnorm(10000))
+approx(fhat$x, fhat$y, xout = c(-4, -3.5, -2))
