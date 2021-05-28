@@ -1,0 +1,548 @@
+rm(list=ls( ))
+#remove old data in memory
+
+library(mgcv)  # generalized additive models (GAM)
+install.packages("crs")
+library(crs)   # regression splines
+#install.packages("LARF")
+library(LARF)  # series regression
+library(np)    # nonparametric regression package
+# load packages
+
+###############################
+# generalized additive models #
+###############################
+
+data(oecdpanel) 
+# call oecdpanel
+
+attach(oecdpanel)
+#attach
+
+str(oecdpanel)  
+# GDP growth (gdp) and other economic variables
+
+#Ex. 1:
+# an additive nonparametric model
+model <- gam(growth~factor(oecd)+factor(year)+s(initgdp)+s(popgro)+ s(inv)+s(humancap))  
+
+# remark: edf stands for estimated degrees of freedom
+summary(model)
+#can interpret the negative/positive effects of factor dummy variables
+#cannot interpret directly the impace of the smoothed variable 
+
+#Ex. 2:
+par(mfrow=c(2,2))#combine plots (tocombine all 4 plots intp 1 plot)
+plot(model) #run 2 lines at the same time 
+# plot regression functions
+
+#look at the output of the last model
+#Approximate significance of smooth terms:
+ #            edf Ref.df      F  p-value    
+#s(initgdp)  5.040  6.171  2.491 0.023446 *  
+ # s(popgro)   6.613  7.752  3.997 0.000167 ***
+  #s(inv)      2.728  3.456 24.142  < 2e-16 ***
+  #s(humancap) 1.000  1.000  1.294 0.255840   
+
+#look at the edf (d.o.f), the higher the value of edf, the more curved the plot is 
+
+---
+######################
+# regression splines #
+######################
+
+#Ex. 3: #Spline regression: a piece wise polynomial function in subsets of the data, in each subset, run the series regressions
+# define the model and regression spline parameters 
+# (deriv=1 means that first derivatives (marginal effects) w.r.t. continuous variables are computed)
+# knots "auto": knots are determined by cross-validation (CV)
+# check model summary (in particular spline degree and number of segments) 
+model <- crs(growth~initgdp,deriv=1, knots="auto",data=oecdpanel)
+summary(model) #something is wrong with the memory #output of the previous model? 
+
+
+#Ex 4: plot data points, fitted values, and confidence intervals
+plot(x=initgdp, y=growth, col="red") #datapoints
+points(x=initgdp, y=model$fitted, cex=.2) #fitted values
+points(x=initgdp, y=model$lwr, cex=.2, col="blue") #lwr: lowerbound of confidence interval 
+points(x=initgdp, y=model$upr, cex=.2, col="blue") #upper bound of confident interval 
+#plot fitted values with confidence intervals
+# cex=.2 means the points should be smaller than normal
+
+#Ex 5:
+# plot first derivates (marginal effects)
+plot(model,deriv=1,ci=TRUE)
+#5 segments (5 linear lines)
+
+
+# Ex 6: run polynomial regression (instead of linear reg) and check model summary
+#w/o using any knot (global polynomial reg)
+# setting knots to NULL performs polynomial regression only (without any knots)
+model <- crs(growth~initgdp,deriv=1, knots=NULL)
+# check model summary (in particular polynomial degree and number of segments)
+summary(model)
+#out put There is 1 continuous predictor
+#Spline degree/number of segments for initgdp: 3/3 (higher order term of 3)
+#Model complexity proxy: degree-knots
+#Knot type: quantiles
+#Pruning of final model: FALSE
+#Training observations: 616
+#Rank of model frame: 6
+#Trace of smoother matrix: 6
+
+
+#F-statistic: 11.51 on 5 and 610 DF, p-value: 1.233e-10 #highly sig.
+
+#Cross-validation score: 0.00085930806
+#Number of multistarts: 5
+#Estimation time: 0.3 seconds
+
+
+#Ex 7:
+#run spline regression of growth on both initgdp and inv as regressors
+model <- crs(growth~initgdp+inv, deriv=1, basis="auto", knots="auto")
+# basis="auto" means that interaction between regressors is in principal allowed but only included if cross-validation suggests to do so
+summary(model)
+#output Indicator Bases/B-spline Bases Regression Spline
+
+#There are 2 continuous predictors
+#Spline degree/number of segments for initgdp: 2/5
+#Spline degree/number of segments for inv: 1/8
+#Model complexity proxy: degree-knots
+#Knot type: quantiles
+#Basis type: additive
+#Pruning of final model: FALSE
+#Training observations: 616
+#Rank of model frame: 15
+#Trace of smoother matrix: 15
+
+
+#F-statistic: 15.15 on 14 and 601 DF, p-value: < 2.2e-16
+#highly sig. model 
+#Cross-validation score: 0.00071738237
+#Number of multistarts: 5
+
+#Ex 8:
+# show the first derivatives from the model 
+model$deriv.mat #wrt to 2 continuous vars 
+#output (ommitted, there are 616 rows)
+ #      initgdp          inv
+#1   -0.0264616971  0.036265781
+#2   -0.0040008415  0.036265781
+#3   -0.0277744773  0.072510713
+#4   -0.0108151081 -0.028037860
+#5    0.0388934953 -0.003321593
+#6   -0.0005070084 -0.026251142
+
+#Ex 9:
+# show confidence intervals around first derivatives
+model$deriv.mat.lwr #lower bound of the first derivative 
+#output (ommitted, there are 616 rows)
+#      initgdp           inv
+#1   -4.739511e-02 -0.0259400005
+#2   -1.217928e-02 -0.0259400005
+#3   -4.646714e-02  0.0211405198
+#4   -1.912447e-02 -0.1059390852
+#5    1.818372e-02 -0.0148758874
+#6   -1.095327e-02 -0.0708375939
+model$deriv.mat.upr # upperbound of the first derivative 
+#for both continuous variables
+
+
+#Ex 10: plot first derivatives 
+plot(model,deriv=1,ci=TRUE) #ci=TRUE _ get the confidence intervals 
+#for both continuous vars (initgdp and inv)
+#first derivative of initgdp _ more smoothed
+#the marginal effect of initgdp is more smoothed than that of inv based on the plots of the first derivatives
+#bc spline degree (no of higher order term) of initgdp = 2, of inv = 1? 
+
+#we haven't done sig test (specification test) for model in ex.7
+#11:
+#run a significance test for the involved variables
+crssigtest(model = model, boot.num = 399, boot = TRUE) #boot=TRUE _compute the bootstrap P-value -> calculate bootstrap s.e. 
+#p-values for both vars are highly sig.
+#output Predictors tested for significance:
+ # initgdp (1), inv (2)
+
+
+#Significance Test Summary
+#P Value: 
+ # initgdp < 2.22e-16 *** (F = 8.804, df1 = 6, df2 = 601, rss = 0.455781, uss = 0.418955) 
+# inv     < 2.22e-16 *** (F =  17.5, df1 = 8, df2 = 601, rss = 0.51657, uss = 0.418955)
+#---
+ # Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+#12:#first derivative can change if we change the reg func (now quantile func)
+# now run a quantile regression (at the median and the 1st quartile) instead of a mean regression
+model <- crs(growth~initgdp+inv, deriv=1, basis="auto", knots="auto", tau=0.5) 
+#tau=0.5 (rwe want first deriavtive of the quantile regression at median)
+plot(model,deriv=1,ci=TRUE) #for 2 continuous variables
+#at the median, the first derivative graph looks different 
+
+model <- crs(growth~initgdp+inv, deriv=1, basis="auto", knots="auto", tau=0.25)
+#tau=0.25 _ first derivative at the first quantile 
+plot(model,deriv=1,ci=TRUE)
+#the first derivatives change now (compared to the meaidan)
+
+#13: #set lower boundary for the Splines degree, CV for no of knots only 
+# now restrict the splines to be at least of order 4 (quartic splines)  and perform cross-validation for the number of knots only
+model <- crs(growth~initgdp+inv, complexity="knots",degree=c(4,4),deriv=1, basis="auto")
+#complexity="knots" _ we want to do CV for the knots only  (don't do CV for the degree of higher order term)
+#degree=c(4,4) (4 for initgdp, 4 for inv)
+#basis="auto" _ include interaction term only if CV suggests to do so 
+
+summary(model)
+#output There are 2 continuous predictors
+#Spline degree/number of segments for initgdp: 4/2 #as we restrict degree =4
+#Spline degree/number of segments for inv: 4/7 #as we restrict degree =4
+#Model complexity proxy: knots #changed, only CV for the knots
+#Knot type: quantiles
+#Basis type: additive
+#Pruning of final model: FALSE
+#Training observations: 616
+#Rank of model frame: 16
+#Trace of smoother matrix: 16
+
+
+# F-statistic: 13.27 on 15 and 600 DF, p-value: < 2.2e-16 #highly stat. sig. 
+
+#plot the first derivatives #changed (bc we have predetermined polynomial degree -> we now have quartic lines)
+plot(model,deriv=1,ci=TRUE)
+
+#by far we only use continuous regressors
+#now add discrete regressor *year)
+#14:
+# now combine continuous initgdp with discrete regressor year 
+model <- crs(growth~initgdp+factor(year), deriv=1, kernel=TRUE, basis="auto", knots="auto")
+#factor(year)-> year should not be smoothed like initgdp
+#kernel = TRUE -> for kernel bandwidth (local kernel method for the discrete variable)
+
+summary(model)
+#output There is 1 continuous predictor (initgdp)
+#There is 1 categorical predictor (year)
+#Spline degree/number of segments for initgdp: 3/1 (initgdp)
+#Bandwidth for factor(year): 0.02 (year) (small bandwidth)
+#Model complexity proxy: degree-knots #CV is performed for both degree and knots 
+#Knot type: quantiles
+#Training observations: 616
+#Rank of model frame: 4
+#Trace of smoother matrix: 24
+
+#F-statistic: 8.024 on 23 and 592 DF, p-value: < 2.2e-16 #sig. 
+
+#plot the first derivative of the model 
+plot(model,deriv=1,ci=TRUE)
+#first derivative of continuous initgdp: a curve at all possibile values 
+#first derivative of discrete year: only at the values of the year 
+#intepretation (compared to the reference year?) #cannot interpret any coefs here yet 
+
+#15:
+#run a significance test for the involved variables
+crssigtest(model = model, boot = FALSE) #boot=FALSE _ don't use bootstrap s.e. but asymptotical s.e.
+#output
+#Predictors tested for significance:
+#initgdp (1), factor(year) (2)
+
+
+#Significance Test Summary
+#P Value: 
+ # initgdp      < 2.22e-16 *** (F = 6.169, df1 = 18, df2 = 592, rss = 0.513191, uss = 0.432133) 
+#factor(year) < 2.22e-16 *** (F =  6.37, df1 = 20, df2 = 592, rss = 0.525126, uss = 0.432133)
+#---
+ # Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#-> sig. 
+
+######PART II#############
+#########################################
+#  SERIES ESTIMATION WITH POWER SERIES  #
+#########################################
+
+data(cps71)
+# load database cps71
+
+str(cps71) #log wage and age
+#short description of the content of the dataset
+
+attach(cps71)
+# every variable in "cps71" loaded into own object 
+
+#Ex. 16:
+# series estimation with power series and cross-validation
+# order corresponds to maximum order to be used in the cross validation to find the optimal order
+seriesest=npse(logwage~age, order=10) #Restrict the maximum order used in the cross-validation to 10
+seriesest2=npse(logwage~age, order=1) #order 1 (linear) #for the plot 
+
+#Find the optimal order Kopt based on cross-validation
+Kopt=seriesest$Lambda #kopt is saved in object l=Lambda in the model
+Kopt
+# optimal order is 4 according to cross-validation
+
+
+
+#Ex. 17: Plot the fitted regression lines of series estimation (order 10), as well as of linear regression (order 1) against the original data.
+seriesfitted=seriesest$fitted #extract the fitted values and save in another R object
+seriesfitted2=seriesest2$fitted
+# fitted values of series estimation
+
+plot(age, logwage) #plot (X,Y) original data points
+lines(age, seriesfitted, col="red") #plot regression curve (optimal order =4)
+lines(age, seriesfitted2, col="blue") #linear reg. line
+#the curve fits the datapoints better than the linear reg. line 
+# plot regression lines
+
+
+#Ex. 18:Test the linear model (𝐾 = 1) using a bootstrap-based nonparametric specification test as suggested by Hong and White
+#####################################################
+#  Hong and White nonparametric specification test  #slide 13 chap 3
+#####################################################
+#H0: both linear reg and series estimation with power series give the same model
+#there is no specific command for the test, has to do by hand 
+#define the u estimated error (difference btw the observed and estimated based on para model)
+#define second error v (difference btw etimated based on para and nonpara)
+
+
+
+#pre step 
+#generate power functions for age up to an order of 10
+#generate.powers()_Internal function used by npse to generate covariates power series.
+agenew=Generate.Powers(age,lambda=10) #generate a power function, lambda = maximum order (10)
+agenew=as.matrix(agenew,nrow(agenew),ncol(agenew)) #over write agenew as a matrix (where the data is from = agenew, no of rows, no of columns)
+
+
+spectest<-function(y,x,Kopt,Kalt,boot=1999){
+  # define a function for the specification test, Kalt _ alternate order (=1_linear)
+  
+  v<-fitted(glm(formula=y~x[,1:Kopt]))-fitted(glm(formula=y~x[,1:Kalt]))
+  # second error v: difference in estimated prediction of parametric and nonparametric model
+  #fitted (only use x where K is opt (nonpara)) - fitted (only use x where K is alternative _ para _ linear )
+  u<-y-fitted(glm(formula=y~x[,1:Kalt]))
+  # estimation error u: residuals of parametric model
+  
+  stat<-mean(v*u)
+  # test statistic
+  
+  statb<-c()
+  #define an empty variable which will serve as bootstrap object 
+  
+  obs<-length(y)
+  # number of observations = same as the length of dep. var y
+  #listen the recording again
+  while(length(statb)<boot){
+    # loop condition: do as long as the bootstrap variable is smaller than the number if bootstraps
+    sboot<-sample(1:obs,obs,TRUE)
+    # randomly draw observations with replacement out of the original sample
+    xb<-x[sboot,]
+    # get the x values of the draw observations
+    yb<-y[sboot]
+    # get the y values of the draw observations
+    vb<-fitted(glm(formula=yb~xb[,1:Kopt]))-fitted(glm(formula=yb~xb[,Kalt]))
+    # difference in prediction of parametric and nonparametric model in the bootstrap sample
+    ub<-yb-fitted(glm(formula=yb~xb[,1]))
+    # residuals of parametric model in the bootstrap sample
+    statb<-c(statb,mean(vb*ub)-stat)
+    # vector of bootstrap statistics
+  }
+  # close the loop
+  
+  p.value<-mean(stat^2<statb^2)
+  # compute the bootstrap p-value
+  
+  list(p.value=p.value, test.stat=stat)
+  # store the p-value and the test statistic
+}
+
+# run the test for linear specification
+spectest(y=logwage,x=agenew,Kopt=Kopt,Kalt=1, boot=999)
+#Kalt=1 _ linear reg 
+#$p.value
+#[1] 0.006006006
+
+#$test.stat
+# [1] 0.105347 -> reject H0 -> linear reg doesn't fit the data very well
+
+#Ex. 19:
+# run the test for undersmoothed specification using K=10 (not Kalt=1)
+spectest(y=logwage,x=agenew,Kopt=Kopt,Kalt=10, boot=999)
+#$p.value
+#[1] 1 -> cannot reject H0 
+
+#$test.stat
+#[1] 3.166122e-10
+
+
+############################
+#  BINARY CHOICE MODELS    #
+############################
+
+load("/Users/manhhuyen/Documents/SP21 Unifr/Big Data Methods/lectures + data set + text/birthweight.RData")
+#load birthweight data
+
+attach(data)
+# every variable in data set loaded into work space
+
+
+###########################################
+#  Semiparametric binary choice models    # chap 2
+###########################################
+#possibilities
+#1. ML of Klein and Spady 
+#2. LS: Ichimura (slide: 40 chap 2, minimize SSR, tuning g(.) and beta)
+
+#Ex. 20:
+# Klein and Spady estimator: compute bandwidth 
+#method="kleinspady"
+reg1bw<-npindexbw(formula=lowbwght~faminc+factor(male)+factor(smoker), method="kleinspady")
+reg1bw
+#Regression data (694 observations, 3 variable(s)):
+
+         #faminc factor(male) factor(smoker)
+#Beta:      1     27.66054      -37.32145
+#Bandwidth:  5.702491
+#Regression Type: Local-Constant
+#Bandwidth Selection Method: Klein and Spady
+
+#Ex. 21:
+# estimation
+reg1<-npindex(bws=reg1bw, gradients=TRUE, errors=TRUE, boot.num=99)
+#npindex(optimal bw,gradients = marginal effect...)
+# summary of estimation
+summary(reg1)
+#            faminc factor(male) factor(smoker)
+     Beta:      1     27.66054      -37.32145
+#Bandwidth: 5.702491
+#Kernel Regression Estimator: Local-Constant
+
+#Confusion Matrix
+#       Predicted   
+# Actual   0   1
+#     0 463  16
+#     1 188  27 (same as in Data mining)
+
+#Overall Correct Classification Ratio:  0.7060519
+#Correct Classification Ratio By Outcome:
+ # 0         1 
+#0.9665971 0.1255814 
+
+#McFadden-Puig-Kerschner performance measure:  0.6321371
+
+
+
+#Ex. 22:
+# average marginal effects
+reg1$mean.grad #gradients
+#[1] -0.003256603 -0.090079379  0.121541140
+
+# standard errors of average marginal effects
+reg1$mean.gerr #s.e. of average marginal effects
+#                 xdat2        xdat3 
+#0.0007031141 0.0194485119 0.0262412367 
+
+#Ex. 23:
+#plot marginal effects of faminc if male and smoker (only in subset of male w mother who smoke)
+plot(faminc[male==1 & smoker==1],reg1$grad[male*smoker==1,1])
+#reg1$grad[male*smoker==1,1] marginal effect for the subssample inthe bracket
+
+#Ex. 24:
+# Ichimura's estimator: compute bandwidth
+reg2bw<-npindexbw(formula=lowbwght~faminc+factor(male)+factor(smoker)) #Ichimura is the default method so don't need to specify as in Klein and Spady
+reg2bw
+#        faminc factor(male) factor(smoker)
+#Beta:      1   -0.8079337      -1.778771
+#Bandwidth:  0.6810183
+#Regression Type: Local-Constant
+#Bandwidth Selection Method: Ichimura
+
+#compare to the results of Klein and Spady approach: 
+#beta for faminc _same 
+#beta for factor male: opposite in sign .... 
+
+#Ex. 25:
+# estimation
+reg2<-npindex(bws=reg2bw, gradients=TRUE, errors=TRUE, boot.num=99)
+#same command npindex, plug in optimal bw from Ichimura 
+# summary of estimation
+summary(reg2)
+#           faminc factor(male) factor(smoker)
+#Beta:      1   -0.8079337      -1.778771
+#Bandwidth: 0.6810183
+#Kernel Regression Estimator: Local-Constant
+
+#Residual standard error: 0.4420153
+#R-squared: 0.09093453
+
+#Continuous Kernel Type: Second-Order Gaussian
+
+#Ex. 26:
+reg2$mean.grad
+# average effects
+#[1]  0.009171335 -0.007409830 -0.016313707 (fminc, male,smoker)
+
+reg2$mean.gerr
+# standard errors of average marginal effects
+#                 xdat2       xdat3 
+#0.010954182 0.008850252 0.019484984 
+
+#Ex. 27:Plot the estimated marginal effects of family income for the subsample of males whose mothers
+#are smokers
+plot(faminc[male*smoker==1],reg2$grad[male*smoker==1,1])
+#plot marginal effects ($grad) of faminc if male and smoker 
+#marginal effect is no differnece than we saw before
+
+#########################################################################
+#  Nonparametric binary choice models using conditional mean estimation #
+#########################################################################
+#nonpara local constant kernel reg 
+#Ex. 28:
+# choose optimal bandwidth
+reg3bw <- npregbw(formula=lowbwght~c(faminc)+factor(male)+factor(smoker), bwmethod="cv.ls", tol=.1, ftol=.1)
+#nonpara reg bw(formula = Y(binary) ~ X, bwmethod=cvls,..
+#tol=.1 tolerance of the cv evaluated at the ...
+#, ftol=.1 : factor tolerant...?
+
+reg3bw
+#               c(faminc) factor(male) factor(smoker)
+#Bandwidth(s):  15.65222    0.1436128     0.05824366
+#Regression Type: Local-Constant
+#Bandwidth Selection Method: Least Squares Cross-Validation
+#tol= tolerance on the position of located minima of the cross-validation function
+#ftol= fractional tolerance on the value of the cross-validation function evaluated at located minima 
+
+# estimate model and also the first derivatives
+reg3 <- npreg(bws=reg3bw, gradients=TRUE) 
+
+# summarize results
+summary(reg3)
+#same as before]
+
+#Ex. 29:
+#plot regression curves at median values of all other (3) regressors
+npplot(reg3bw, plot.errors.method = "bootstrap", plot.errors.boot.num = 99, plot.errors.style="band") 
+#faminc_continuous _ prob having low birth weight doesn;t change very much wrt faminc
+#factor (male) and smoker _ binary (0-1): don't see much difference in prob of having lowe birth weight btw male or fem, or whether the mother is a smoker 
+
+#Ex.30:average marginal effects of each of the regressors
+#average effect of faminc
+mean(reg3$grad[,1]) #gradient of 1st variable (avg marginal effect)
+#[1] -0.001269777
+
+#average effect of male
+mean(reg3$grad[,2]) #of 2nd variable (2nd column)
+#[1] -0.02793213 #avg effect of being male
+
+#average effect of smoker
+mean(reg3$grad[,3])
+#[1] 0.02447619
+
+
+#Ex. 31:
+#plot the estimated marginal effects of faminc if male and smoker (subset of male baby whose mother is smoker)
+plot(faminc[male*smoker==1],reg3$grad[male*smoker==1,1]) #extract the gradient, (plot(data,values))
+#for the subsample, the marginal effect decreases until faminc reached 27, then increase again 
+
+sem<-sd((reg3$grad[,1]))/sqrt(length((reg3$grad[,1]))) #std.error: gradient of faminc/sqrt of length of gradient of faminc
+sem
+#[1] 4.955762e-05 very small 
+
+#t value: mean effect 
+t<-mean(reg3$grad[,1])/sem #marginal effect of faminc / sd of faminc
+t #[1] -25.62223
+
